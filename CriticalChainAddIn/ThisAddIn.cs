@@ -35,7 +35,7 @@ namespace CriticalChainAddIn
             var dataString = newVal.Substring(0, newVal.Length - 1);
             switch (lastChar)
             {
-                case "d":
+                case "d":   
                     return (int)(int.Parse(dataString) * thisApp.ActiveProject.HoursPerDay * 60);
                 case "w":
                     return (int)(int.Parse(dataString) * thisApp.ActiveProject.HoursPerWeek * 60);
