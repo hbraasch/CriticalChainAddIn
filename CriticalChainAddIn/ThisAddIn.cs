@@ -18,32 +18,7 @@ namespace CriticalChainAddIn
         {
             thisApp = Application;
             this.Application.NewProject += Application_NewProject;
-            this.Application.ProjectBeforeTaskChange += Application_ProjectBeforeTaskChange;
         }
-
-        private void Application_ProjectBeforeTaskChange(MSProject.Task task, MSProject.PjField field, object newVal, ref bool cancel)
-        {
-            if (field == Microsoft.Office.Interop.MSProject.PjField.pjTaskDurationText)
-            {
-                OnTaskDurationChanged(task, (int) ParseDurationText((string) newVal));
-            }
-        }
-
-        private int ParseDurationText(string newVal)
-        {
-            var lastChar = newVal.Substring(newVal.Length-1);
-            var dataString = newVal.Substring(0, newVal.Length - 1);
-            switch (lastChar)
-            {
-                case "d":   
-                    return (int)(int.Parse(dataString) * thisApp.ActiveProject.HoursPerDay * 60);
-                case "w":
-                    return (int)(int.Parse(dataString) * thisApp.ActiveProject.HoursPerWeek * 60);
-                default:
-                    return (int)(int.Parse(newVal) * thisApp.ActiveProject.HoursPerDay * 60);
-            }
-        }   
-
 
         private void Application_NewProject(MSProject.Project pj)
         {

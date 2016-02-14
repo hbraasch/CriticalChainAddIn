@@ -26,19 +26,6 @@ namespace CriticalChainAddIn
                 var isBuffersHidden = CcmData.GetIsBuffersHidden();
                 HideUnhideBuffers(isBuffersHidden);
             };
-            CmmAddIn.OnTaskDurationChanged += (task, newDuration) =>
-            {
-                var currentAuxDurationInMinutes = CcmData.GetTaskData(task.ID)?.AuxDurationInMinutes ?? 0;
-                if (currentAuxDurationInMinutes == 0)
-                {
-                    CcmData.UpdateTaskData(task.ID, newDuration);
-                } else
-                {
-                    var deltaDuration = task.Duration - newDuration;
-                    var newAuxDurationInMinutes = currentAuxDurationInMinutes + deltaDuration;
-                    CcmData.UpdateTaskData(task.ID, newAuxDurationInMinutes);
-                }
-            };
         }
 
         private void buttonCmmProperties_Click(object sender, RibbonControlEventArgs e)
@@ -215,7 +202,11 @@ namespace CriticalChainAddIn
 
         private void buttonCcmUpdateBuffers_Click(object sender, RibbonControlEventArgs e)
         {
+            UpdateBuffers();
+        }
 
+        private void UpdateBuffers()
+        {
             // Find all buffer tasks
             var buffers = GetAllBuffers();
 
@@ -226,12 +217,18 @@ namespace CriticalChainAddIn
                 var bufferCriticalPathActivities = GetCriticalPath(buffer);
 
                 // Calc buffer length using particular formula
-                var duration = CalcBufferDuration(bufferCriticalPathActivities, (activities) => {
+                var duration = CalcBufferDuration(bufferCriticalPathActivities, (activities) =>
+                {
                     // Collate all delta durations
                     int result = 0;
                     foreach (var activity in activities)
                     {
                         var taskSafeDurationInMinutes = CcmData.GetTaskData(int.Parse(activity.Id))?.AuxDurationInMinutes ?? activity.Duration;
+                        if (taskSafeDurationInMinutes < activity.Duration)
+                        {
+                            taskSafeDurationInMinutes = activity.Duration;
+                            CcmData.UpdateTaskData(int.Parse(activity.Id), taskSafeDurationInMinutes);
+                        }
                         result += (taskSafeDurationInMinutes - activity.Duration) / 2;
                     }
                     return result;
@@ -242,7 +239,6 @@ namespace CriticalChainAddIn
 
             }
             // End of: For each buffer, update its duration
-
         }
 
         private int CalcBufferDuration(List<Activity> bufferCriticalPathActivities, Func<List<Activity>, int> DurationCalculator) => DurationCalculator(bufferCriticalPathActivities);
@@ -312,6 +308,11 @@ namespace CriticalChainAddIn
 
         private void buttonInsertBuffer_Click(object sender, RibbonControlEventArgs e)
         {
+            // Create buffer task
+            var newTask = project.Tasks.Add(Constants.BUFFER_NAME);
+            newTask.Start = project.Start;
+            newTask.Duration = 1;
+#if false
             var selection = application.ActiveSelection;
             var selectedTasks = selection.Tasks;
             if (selectedTasks == null)
@@ -321,7 +322,7 @@ namespace CriticalChainAddIn
                 newTask.Start = project.Start;
                 newTask.Duration = 1;
             }
-            else 
+            else
             {
                 if (selectedTasks.Count != 2) throw new BusinessException("Please select TWO tasks");
                 MSProject.Task startTask = selectedTasks[1];
@@ -343,7 +344,8 @@ namespace CriticalChainAddIn
                 // Add buffer to end task dependency
                 endTask.Predecessors = newTask.ID.ToString();
                 // End of: Add dependencies 
-            }
+            } 
+#endif
         }
 
         private string GeneratePredecessorsString(List<MSProject.Task> predecessorTasks)
