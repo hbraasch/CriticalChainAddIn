@@ -1,4 +1,5 @@
-﻿using CriticalChainAddIn.Utils;
+﻿using CriticalChainAddIn.Models;
+using CriticalChainAddIn.Utils;
 using System;
 using System.Windows.Forms;
 
@@ -59,6 +60,11 @@ namespace CriticalChainAddIn.Views
         {
             inputOutputData.ExitState = InputOutputData.ExitStates.QUIT;
             Close();
+        }
+
+        private void clearAllTaskSafeDurationsToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            CcmData.ClearTaskData();
         }
     }
 

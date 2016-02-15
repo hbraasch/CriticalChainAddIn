@@ -45,8 +45,9 @@ namespace CriticalChainAddIn
 
                 if (selectedTask.Name.Contains(Constants.BUFFER_NAME) || selectedTask.Name.Contains(Constants.MILESTONE_NAME)) throw new BusinessException("You can only set CCM properties of normal tasks");
 
-                inputOutputData.AggressiveDurationInMinutes = Convert.ToInt32(selectedTask.Duration);
-                inputOutputData.SafeDurationInMinutes = CcmData.GetTaskData(selectedTask.ID)?.AuxDurationInMinutes ?? inputOutputData.AggressiveDurationInMinutes;
+                var currentProgress = selectedTask.Duration;
+                inputOutputData.AggressiveDurationInMinutes = currentProgress;
+                inputOutputData.SafeDurationInMinutes = CcmData.GetTaskSafeDurationInMinutes(selectedTask.ID.ToString(), currentProgress);
                 // End of: Get durations of selected item
 
                 // Display form
@@ -55,8 +56,8 @@ namespace CriticalChainAddIn
                 if (form.inputOutputData.ExitState == frmProperties.InputOutputData.ExitStates.EXIT)
                 {
                     // Conduct: Save duration
-                    selectedTask.Duration = form.inputOutputData.AggressiveDurationInMinutes * DurationTools.GetMinutes2Days();
-                    CcmData.UpdateTaskData(selectedTask.ID, (int)(form.inputOutputData.SafeDurationInMinutes * DurationTools.GetMinutes2Days()));
+                    selectedTask.Duration = form.inputOutputData.AggressiveDurationInMinutes;
+                    CcmData.UpdateTaskData(selectedTask.ID, selectedTask.Duration, (int)(form.inputOutputData.SafeDurationInMinutes));
                     // End of: Save duration
                 }
 
@@ -71,122 +72,7 @@ namespace CriticalChainAddIn
 
         }
 
-        private void buttonCcmPerformance_Click(object sender, RibbonControlEventArgs e)
-        {
 
-            if (project.StatusDate is string)
-            {
-                if (project.StatusDate == "NA")
-                {
-                    MessageBox.Show("Set the status date");
-                    return;
-                } 
-            }
-
-            Dictionary<string, MSProject.Task> indexedTasks = new Dictionary<string, Microsoft.Office.Interop.MSProject.Task>();
-
-            // Calculate performance for each buffer
-            var criticalChains = new List<List<Activity>>();
-            // Find all buffer tasks
-            var buffers = GetAllBuffers();
-
-            // For each buffer, get critical path
-            foreach (var buffer in buffers)
-            {
-                criticalChains.Add(GetCriticalPath(buffer));
-            }
-
-            // Index all activityTasks
-            foreach (var criticalChain in criticalChains)
-            {
-                foreach (var item in criticalChain)
-                {
-                    if (!indexedTasks.ContainsKey(item.Id)) {
-                        indexedTasks.Add(item.Id, project.Tasks.Find(int.Parse(item.Id)));
-                    }
-                }               
-            }
-            // End of: Calculate performance for each buffer
-
-            // Calculate performance for each buffer
-            foreach (var criticalChain in criticalChains)
-            {
-                // Determine total duration of chain
-                int totalChainDurationInMinutes = 0;
-                foreach (var item in criticalChain)
-                {
-                    totalChainDurationInMinutes += item.Duration;
-                }
-
-                // Determine how much time from start of chain till status date
-                int timeTillStatusDateInMinutes = 0;
-                foreach (var item in criticalChain)
-                {
-                    var itemTask = indexedTasks[item.Id];
-                    if (itemTask.Finish <= project.StatusDate)
-                    {
-                        timeTillStatusDateInMinutes += itemTask.Duration;
-                    }
-                    else if (itemTask.Start > project.StatusDate)
-                    {
-                        // Do not take these into account
-                    }
-                    else
-                    {
-                        timeTillStatusDateInMinutes += GetWorkingTimeBetweenDatesInMinutes(itemTask.Start, project.StatusDate);
-                    }
-                }
-
-                // Determine how much is progress (in time)
-                // Get tasks with some progress in chain
-                List<MSProject.Task> progressedTasks = new List<MSProject.Task>();
-                foreach (var item in criticalChain)
-                {
-                    var itemTask = indexedTasks[item.Id];
-                    if (itemTask.PercentComplete > 0)
-                    {
-                        progressedTasks.Add(itemTask);
-                    }
-                }
-
-                // Add up their progress
-                int progressedTimeInMinutes = 0;
-                foreach (var progressedTask in progressedTasks)
-                {
-                    progressedTimeInMinutes += (progressedTask.PercentComplete * progressedTask.Duration)/100;
-                }
-                // End of: Determine how much is progress (in time)
-
-                // Determine percentage of buffer used
-                var bufferIndex = criticalChains.IndexOf(criticalChain);
-                var timeBehind = (float)(Math.Max(0,timeTillStatusDateInMinutes - progressedTimeInMinutes));
-                float percentBufferUsed = Math.Min(1f, (float) (timeBehind / buffers[bufferIndex].Duration));
-
-                // Determine percent project complete
-                float percentProjectComplete = (float) timeTillStatusDateInMinutes / totalChainDurationInMinutes;
-
-                // Save this datapoint
-                CcmData.UpdateBufferProgressData(buffers[bufferIndex].ID.ToString(), new CcmData.BufferProgressData.ProgressData {
-                    PercentBufferUsed = percentBufferUsed,
-                    PercentProjectCompleted = percentProjectComplete,
-                    SampleDate = project.StatusDate,
-                });
-
-            }
-
-            // Display performance
-            var form = new frmProgressChart();
-            form.ShowDialog();
-            // End of: Display performance
-
-        }
-
-        private int GetWorkingTimeBetweenDatesInMinutes(DateTime startDate, DateTime endDate)
-        {
-            var days = Math.Ceiling((endDate - startDate).TotalDays);
-            var timeInHours = days * project.HoursPerDay;
-            return (int)(timeInHours * 60);
-        }
 
         private void buttonCcmSettings_Click(object sender, RibbonControlEventArgs e)
         {
@@ -207,6 +93,8 @@ namespace CriticalChainAddIn
 
         private void UpdateBuffers()
         {
+            Dictionary<string, MSProject.Task> indexedTasks = new Dictionary<string, Microsoft.Office.Interop.MSProject.Task>();
+
             // Find all buffer tasks
             var buffers = GetAllBuffers();
 
@@ -216,6 +104,16 @@ namespace CriticalChainAddIn
                 // Get critical path for buffer
                 var bufferCriticalPathActivities = GetCriticalPath(buffer);
 
+                // Index all tasks for fast access
+                foreach (var bufferCriticalPathActivity in bufferCriticalPathActivities)
+                {
+                    if (!indexedTasks.ContainsKey(bufferCriticalPathActivity.Id))
+                    {
+                        indexedTasks.Add(bufferCriticalPathActivity.Id, project.Tasks.Find(int.Parse(bufferCriticalPathActivity.Id)));
+                    }
+
+                }
+
                 // Calc buffer length using particular formula
                 var duration = CalcBufferDuration(bufferCriticalPathActivities, (activities) =>
                 {
@@ -223,13 +121,12 @@ namespace CriticalChainAddIn
                     int result = 0;
                     foreach (var activity in activities)
                     {
-                        var taskSafeDurationInMinutes = CcmData.GetTaskData(int.Parse(activity.Id))?.AuxDurationInMinutes ?? activity.Duration;
-                        if (taskSafeDurationInMinutes < activity.Duration)
-                        {
-                            taskSafeDurationInMinutes = activity.Duration;
-                            CcmData.UpdateTaskData(int.Parse(activity.Id), taskSafeDurationInMinutes);
-                        }
-                        result += (taskSafeDurationInMinutes - activity.Duration) / 2;
+                        // Check if CcmData is stil valid
+                        var taskDuration = indexedTasks[activity.Id].Duration;                       
+                        var taskSafeDurationInMinutes = CcmData.GetTaskSafeDurationInMinutes(activity.Id, taskDuration);
+                        // End of: Check if CcmData is stil valid
+
+                        result += (taskSafeDurationInMinutes - taskDuration) / 2;
                     }
                     return result;
                 });
@@ -297,6 +194,146 @@ namespace CriticalChainAddIn
                 }
             }
             return list;
+        }
+
+        private void buttonCcmPerformance_Click(object sender, RibbonControlEventArgs e)
+        {
+
+            if (project.StatusDate is string)
+            {
+                if (project.StatusDate == "NA")
+                {
+                    MessageBox.Show("Set the status date");
+                    return;
+                }
+            }
+
+            Dictionary<string, MSProject.Task> indexedTasks = new Dictionary<string, Microsoft.Office.Interop.MSProject.Task>();
+
+            // Calculate performance for each buffer
+            var criticalChains = new List<List<Activity>>();
+            // Find all buffer tasks
+            var buffers = GetAllBuffers();
+
+            // For each buffer, get critical path
+            foreach (var buffer in buffers)
+            {
+                criticalChains.Add(GetCriticalPath(buffer));
+            }
+
+            // Index all activityTasks
+            foreach (var criticalChain in criticalChains)
+            {
+                foreach (var item in criticalChain)
+                {
+                    if (!indexedTasks.ContainsKey(item.Id))
+                    {
+                        indexedTasks.Add(item.Id, project.Tasks.Find(int.Parse(item.Id)));
+                    }
+                }
+            }
+            // End of: Calculate performance for each buffer
+
+            // Calculate performance for each buffer
+            foreach (var buffer in buffers)
+            {
+                var bufferIndex = buffers.IndexOf(buffer);
+                var criticalChain = criticalChains[bufferIndex];
+
+                // Determine total duration of chain
+                int totalChainDurationInMinutes = 0;
+                foreach (var item in criticalChain)
+                {
+                    totalChainDurationInMinutes += item.Duration;
+                }
+                totalChainDurationInMinutes += buffer.Duration;
+
+                // Determine how much time from start of chain till status date
+                int timeTillStatusDateInMinutes = 0;
+                // Measure task durations contribution first
+                foreach (var item in criticalChain)
+                {
+                    var itemTask = indexedTasks[item.Id];
+                    if (itemTask.Finish <= project.StatusDate)
+                    {
+                        timeTillStatusDateInMinutes += itemTask.Duration;
+                    }
+                    else if (itemTask.Start > project.StatusDate)
+                    {
+                        // Do not take these into account
+                    }
+                    else
+                    {
+                        timeTillStatusDateInMinutes += GetWorkingTimeBetweenDatesInMinutes(itemTask.Start, project.StatusDate);
+                    }
+                }
+
+                // Measure buffer duration contribution if applicable
+                if (buffer.Finish <= project.StatusDate)
+                {
+                    timeTillStatusDateInMinutes += buffer.Duration;
+                }
+                else if (buffer.Start > project.StatusDate)
+                {
+                    // Do not take these into account
+                }
+                else
+                {
+                    timeTillStatusDateInMinutes += GetWorkingTimeBetweenDatesInMinutes(buffer.Start, project.StatusDate);
+                }
+                // End of: Measure buffer duration contribution if applicable
+                // End of: Determine how much time from start of chain till status date
+
+                // Determine how much is progress (in time)
+                // Get tasks with some progress in chain
+                List<MSProject.Task> progressedTasks = new List<MSProject.Task>();
+                foreach (var item in criticalChain)
+                {
+                    var itemTask = indexedTasks[item.Id];
+                    if (itemTask.PercentComplete > 0)
+                    {
+                        progressedTasks.Add(itemTask);
+                    }
+                }
+
+                // Add up their progress
+                int progressedTimeInMinutes = 0;
+                foreach (var progressedTask in progressedTasks)
+                {
+                    var safeTimeInMinutes = CcmData.GetTaskSafeDurationInMinutes(progressedTask.ID.ToString(), progressedTask.Duration);
+                    progressedTimeInMinutes += (progressedTask.PercentComplete * safeTimeInMinutes) / 100;
+                }
+                // End of: Determine how much is progress (in time)
+
+                // Determine percentage of buffer used
+                var timeBehind = (float)(Math.Max(0, timeTillStatusDateInMinutes - progressedTimeInMinutes));
+                float percentBufferUsed = Math.Min(1f, (float)(timeBehind / buffer.Duration));
+
+                // Determine percent project complete
+                float percentProjectComplete = (float)timeTillStatusDateInMinutes / totalChainDurationInMinutes;
+
+                // Save this datapoint
+                CcmData.UpdateBufferPerformanceData(buffers[bufferIndex].ID.ToString(), new CcmData.BufferPerformanceData.PerformanceData
+                {
+                    PercentBufferUsed = percentBufferUsed,
+                    PercentProjectCompleted = percentProjectComplete,
+                    SampleDate = project.StatusDate,
+                });
+
+            }
+
+            // Display performance
+            var form = new frmPerformanceChart();
+            form.ShowDialog();
+            // End of: Display performance
+
+        }
+
+        private int GetWorkingTimeBetweenDatesInMinutes(DateTime startDate, DateTime endDate)
+        {
+            var days = Math.Ceiling((endDate - startDate).TotalDays);
+            var timeInHours = days * project.HoursPerDay;
+            return (int)(timeInHours * 60);
         }
 
         private void buttonInsertStart_Click(object sender, RibbonControlEventArgs e)
@@ -367,7 +404,7 @@ namespace CriticalChainAddIn
         private void buttonClearPerformance_Click(object sender, RibbonControlEventArgs e)
         {
             if (MessageBox.Show("Are you sure?", "Clear", MessageBoxButtons.OKCancel) == DialogResult.Cancel) return;
-            CcmData.GetRepository().BufferProgressDatas.Clear();
+            CcmData.GetRepository().BufferPerformanceDatas.Clear();
             CcmData.Save();
         }
 

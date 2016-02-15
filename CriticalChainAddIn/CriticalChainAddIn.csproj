@@ -174,11 +174,11 @@
     <Compile Include="Utils\Extensions.cs" />
     <Compile Include="Utils\Serialize.cs" />
     <Compile Include="Utils\Validation.cs" />
-    <Compile Include="Views\frmProgressChart.cs">
+    <Compile Include="Views\frmPerformanceChart.cs">
       <SubType>Form</SubType>
     </Compile>
-    <Compile Include="Views\frmProgressChart.Designer.cs">
-      <DependentUpon>frmProgressChart.cs</DependentUpon>
+    <Compile Include="Views\frmPerformanceChart.Designer.cs">
+      <DependentUpon>frmPerformanceChart.cs</DependentUpon>
     </Compile>
     <Compile Include="Views\frmProperties.cs">
       <SubType>Form</SubType>
@@ -204,8 +204,8 @@
       <AutoGen>True</AutoGen>
       <DependentUpon>Resources.resx</DependentUpon>
     </Compile>
-    <EmbeddedResource Include="Views\frmProgressChart.resx">
-      <DependentUpon>frmProgressChart.cs</DependentUpon>
+    <EmbeddedResource Include="Views\frmPerformanceChart.resx">
+      <DependentUpon>frmPerformanceChart.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="Views\frmProperties.resx">
       <DependentUpon>frmProperties.cs</DependentUpon>

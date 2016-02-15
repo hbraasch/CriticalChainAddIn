@@ -27,7 +27,7 @@ namespace CriticalChainAddIn.Models
         public class Repository
         {
             public Dictionary<int, TaskData> TaskDatas { get; set; } = new Dictionary<int, TaskData>();
-            public Dictionary<string, BufferProgressData> BufferProgressDatas { get; set; } = new Dictionary<string, BufferProgressData>();
+            public Dictionary<string, BufferPerformanceData> BufferPerformanceDatas { get; set; } = new Dictionary<string, BufferPerformanceData>();
             public bool IsBuffersHidden { get; set; } = false;
         }
 
@@ -40,15 +40,16 @@ namespace CriticalChainAddIn.Models
         public class TaskData
         {
             public int TaskId { get; set; }
+            public int SnapShotDurationInMinutes { get; set; }
             public int AuxDurationInMinutes { get; set; }
 
         }
 
-        public class BufferProgressData
+        public class BufferPerformanceData
         {
-            public List<ProgressData> ProgressDatas = new List<ProgressData>();
+            public List<PerformanceData> PerformanceDatas = new List<PerformanceData>();
 
-            public class ProgressData
+            public class PerformanceData
             {
                 public float PercentBufferUsed { get; set; }
                 public float PercentProjectCompleted { get; set; }
@@ -70,6 +71,13 @@ namespace CriticalChainAddIn.Models
             }
         }
 
+        internal static void ClearTaskData()
+        {
+            if (repository == null) Load();
+            repository.TaskDatas.Clear();
+            Save();
+        }
+
         public static void Save()
         {
             var cmmDataJson = Serialize.SerializeObjectToStringJson<Repository>(repository);
@@ -87,55 +95,59 @@ namespace CriticalChainAddIn.Models
             return null;
         }
 
-        public static void UpdateTaskData(int taskId, int safeDurationInMinutes)
+        public static void UpdateTaskData(int taskId, int aggressiveDurationInMinutes, int safeDurationInMinutes)
         {
             if (repository == null) Load();
             if (repository.TaskDatas.Keys.Contains(taskId))
             {
+                repository.TaskDatas[taskId].SnapShotDurationInMinutes = aggressiveDurationInMinutes;
                 repository.TaskDatas[taskId].AuxDurationInMinutes = safeDurationInMinutes;
-            } else
+            }
+            else
             {
-                repository.TaskDatas.Add(taskId, new TaskData { TaskId = taskId, AuxDurationInMinutes = safeDurationInMinutes});
+                repository.TaskDatas.Add(taskId, new TaskData { TaskId = taskId,
+                    SnapShotDurationInMinutes = aggressiveDurationInMinutes,
+                    AuxDurationInMinutes = safeDurationInMinutes});
             }
             Save();
         }
 
-        public static void UpdateBufferProgressData(string bufferId, BufferProgressData.ProgressData progressData)
+        public static void UpdateBufferPerformanceData(string bufferId, BufferPerformanceData.PerformanceData progressData)
         {
             if (repository == null) Load();
-            if (repository.BufferProgressDatas.Keys.Contains(bufferId))
+            if (repository.BufferPerformanceDatas.Keys.Contains(bufferId))
             {
                 // Buffer already exists
-                if (repository.BufferProgressDatas[bufferId].ProgressDatas.FirstOrDefault(o=>o.SampleDate == progressData.SampleDate) != null)
+                if (repository.BufferPerformanceDatas[bufferId].PerformanceDatas.FirstOrDefault(o=>o.SampleDate == progressData.SampleDate) != null)
                 {
                     // Overwrite data
-                    var item = repository.BufferProgressDatas[bufferId].ProgressDatas.FirstOrDefault(o => o.SampleDate == progressData.SampleDate);
-                    var index = repository.BufferProgressDatas[bufferId].ProgressDatas.IndexOf(item);
-                    repository.BufferProgressDatas[bufferId].ProgressDatas[index] = progressData;
+                    var item = repository.BufferPerformanceDatas[bufferId].PerformanceDatas.FirstOrDefault(o => o.SampleDate == progressData.SampleDate);
+                    var index = repository.BufferPerformanceDatas[bufferId].PerformanceDatas.IndexOf(item);
+                    repository.BufferPerformanceDatas[bufferId].PerformanceDatas[index] = progressData;
 
                 } else
                 {
                     // Add item
-                    repository.BufferProgressDatas[bufferId].ProgressDatas.Add(progressData);
+                    repository.BufferPerformanceDatas[bufferId].PerformanceDatas.Add(progressData);
                 }
             }
             else
             {
                 // Create new buffer with first data item
-                repository.BufferProgressDatas.Add(bufferId, new BufferProgressData ());
-                repository.BufferProgressDatas[bufferId].ProgressDatas.Add(progressData);
+                repository.BufferPerformanceDatas.Add(bufferId, new BufferPerformanceData ());
+                repository.BufferPerformanceDatas[bufferId].PerformanceDatas.Add(progressData);
             }
             Save();
         }
 
-        public static List<BufferProgressData.ProgressData> GetBufferProgressDatas(string bufferId)
+        public static List<BufferPerformanceData.PerformanceData> GetBufferProgressDatas(string bufferId)
         {
-            if (repository.BufferProgressDatas.Keys.Contains(bufferId))
+            if (repository.BufferPerformanceDatas.Keys.Contains(bufferId))
             {
-                return repository.BufferProgressDatas[bufferId].ProgressDatas;
+                return repository.BufferPerformanceDatas[bufferId].PerformanceDatas;
             } else
             {
-                return new List<BufferProgressData.ProgressData>();
+                return new List<BufferPerformanceData.PerformanceData>();
             }
         }
 
@@ -173,6 +185,28 @@ namespace CriticalChainAddIn.Models
                 return repository.TaskDatas.FirstOrDefault(o => o.Key == taskId).Value.AuxDurationInMinutes;
             }
             throw new BusinessException("Buffer does not exist");
+        }
+
+        /// <summary>
+        /// Used to get safe duration, get if from saved value, and if not existing or duraion has changed, update it to task duration values
+        /// </summary>
+        /// <param name="taskId"></param>
+        /// <param name="taskDuration"></param>
+        /// <returns></returns>
+        internal static int GetTaskSafeDurationInMinutes(string taskId, dynamic taskDuration)
+        {
+            var taskData = CcmData.GetTaskData(int.Parse(taskId)) ?? new CcmData.TaskData { SnapShotDurationInMinutes = taskDuration, AuxDurationInMinutes = taskDuration };
+            if (taskDuration == taskData.SnapShotDurationInMinutes)
+            {
+                // Good, no changes
+                return CcmData.GetTaskData(int.Parse(taskId))?.AuxDurationInMinutes ?? taskDuration;
+            }
+            else
+            {
+                // Something changed, generate new default values
+                CcmData.UpdateTaskData(int.Parse(taskId), taskDuration, taskDuration);
+                return taskDuration;
+            }
         }
     }
 }

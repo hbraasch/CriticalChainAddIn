@@ -1,6 +1,6 @@
 ﻿namespace CriticalChainAddIn.Views
 {
-    partial class frmProgressChart
+    partial class frmPerformanceChart
     {
         /// <summary>
         /// Required designer variable.

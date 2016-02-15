@@ -12,22 +12,24 @@ using System.Windows.Forms.DataVisualization.Charting;
 
 namespace CriticalChainAddIn.Views
 {
-    public partial class frmProgressChart : Form
+    public partial class frmPerformanceChart : Form
     {
 
 
         public class InputData
         {
-            public Dictionary<string, CcmData.BufferProgressData> BufferProgressDatas { get; set; }
+            public Dictionary<string, CcmData.BufferPerformanceData> BufferProgressDatas { get; set; }
         }
 
 
 
-        public frmProgressChart()
+        public frmPerformanceChart()
         {
             InitializeComponent();
             UpdateChart();
         }
+
+        
 
 
         public void UpdateChart()
@@ -67,7 +69,7 @@ namespace CriticalChainAddIn.Views
             chartFever.ChartAreas["Default"].Area3DStyle.Enable3D = false;
 
             // Fill data
-            var bufferProgressDatas = CcmData.GetRepository().BufferProgressDatas;
+            var bufferProgressDatas = CcmData.GetRepository().BufferPerformanceDatas;
             foreach (var bufferProgressData in bufferProgressDatas)
             {
                 var newSeries = new Series { Name = $"Buffer: {bufferProgressData.Key}" };
@@ -78,7 +80,7 @@ namespace CriticalChainAddIn.Views
                 newSeries.LabelFormat = "Top";
 
                 chartFever.Series.Add(newSeries);
-                foreach (var progressData in bufferProgressData.Value.ProgressDatas)
+                foreach (var progressData in bufferProgressData.Value.PerformanceDatas)
                 {
                     newSeries.Points.AddXY(progressData.PercentProjectCompleted * 100, progressData.PercentBufferUsed * 100);
                 }
